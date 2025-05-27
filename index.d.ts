@@ -1,156 +1,71 @@
-// Minimum TypeScript Version: 4.1
-// tslint:disable:no-unnecessary-generics
+import Dispatcher from'./dispatcher'
+import { setGlobalDispatcher, getGlobalDispatcher } from './global-dispatcher'
+import { setGlobalOrigin, getGlobalOrigin } from './global-origin'
+import Pool from'./pool'
+import { RedirectHandler, DecoratorHandler } from './handlers'
 
-import {
-  JSX,
-  FunctionComponent,
-  ComponentType,
-  ComponentChildren,
-  VNode,
-} from "preact";
+import BalancedPool from './balanced-pool'
+import Client from'./client'
+import buildConnector from'./connector'
+import errors from'./errors'
+import Agent from'./agent'
+import MockClient from'./mock-client'
+import MockPool from'./mock-pool'
+import MockAgent from'./mock-agent'
+import mockErrors from'./mock-errors'
+import ProxyAgent from'./proxy-agent'
+import EnvHttpProxyAgent from './env-http-proxy-agent'
+import RetryHandler from'./retry-handler'
+import RetryAgent from'./retry-agent'
+import { request, pipeline, stream, connect, upgrade } from './api'
+import interceptors from './interceptors'
 
-import {
-  Path,
-  BaseLocationHook,
-  HookReturnValue,
-  HookNavigationOptions,
-  LocationHook,
-} from "../use-location";
+export * from './util'
+export * from './cookies'
+export * from './eventsource'
+export * from './fetch'
+export * from './file'
+export * from './filereader'
+export * from './formdata'
+export * from './diagnostics-channel'
+export * from './websocket'
+export * from './content-type'
+export * from './cache'
+export { Interceptable } from './mock-interceptor'
 
-import { DefaultParams, Match } from "../matcher";
-import { RouterObject, RouterOptions } from "../router";
+export { Dispatcher, BalancedPool, Pool, Client, buildConnector, errors, Agent, request, stream, pipeline, connect, upgrade, setGlobalDispatcher, getGlobalDispatcher, setGlobalOrigin, getGlobalOrigin, interceptors, MockClient, MockPool, MockAgent, mockErrors, ProxyAgent, EnvHttpProxyAgent, RedirectHandler, DecoratorHandler, RetryHandler, RetryAgent }
+export default Undici
 
-// re-export some types from these modules
-export {
-  DefaultParams,
-  Params,
-  MatchWithParams,
-  NoMatch,
-  Match,
-} from "../matcher";
-export { Path, BaseLocationHook, LocationHook } from "../use-location";
-export * from "../router";
-
-export type ExtractRouteOptionalParam<PathType extends Path> =
-  PathType extends `${infer Param}?`
-    ? { readonly [k in Param]: string | undefined }
-    : PathType extends `${infer Param}*`
-    ? { readonly [k in Param]: string | undefined }
-    : PathType extends `${infer Param}+`
-    ? { readonly [k in Param]: string }
-    : { readonly [k in PathType]: string };
-
-export type ExtractRouteParams<PathType extends string> =
-  string extends PathType
-    ? DefaultParams
-    : PathType extends `${infer _Start}:${infer ParamWithOptionalRegExp}/${infer Rest}`
-    ? ParamWithOptionalRegExp extends `${infer Param}(${infer _RegExp})`
-      ? ExtractRouteOptionalParam<Param> & ExtractRouteParams<Rest>
-      : ExtractRouteOptionalParam<ParamWithOptionalRegExp> &
-          ExtractRouteParams<Rest>
-    : PathType extends `${infer _Start}:${infer ParamWithOptionalRegExp}`
-    ? ParamWithOptionalRegExp extends `${infer Param}(${infer _RegExp})`
-      ? ExtractRouteOptionalParam<Param>
-      : ExtractRouteOptionalParam<ParamWithOptionalRegExp>
-    : {};
-
-/*
- * Components: <Route />
- */
-
-export interface RouteComponentProps<T extends DefaultParams = DefaultParams> {
-  params: T;
+declare namespace Undici {
+  var Dispatcher: typeof import('./dispatcher').default
+  var Pool: typeof import('./pool').default;
+  var RedirectHandler: typeof import ('./handlers').RedirectHandler
+  var DecoratorHandler: typeof import ('./handlers').DecoratorHandler
+  var RetryHandler: typeof import ('./retry-handler').default
+  var createRedirectInterceptor: typeof import ('./interceptors').default.createRedirectInterceptor
+  var BalancedPool: typeof import('./balanced-pool').default;
+  var Client: typeof import('./client').default;
+  var buildConnector: typeof import('./connector').default;
+  var errors: typeof import('./errors').default;
+  var Agent: typeof import('./agent').default;
+  var setGlobalDispatcher: typeof import('./global-dispatcher').setGlobalDispatcher;
+  var getGlobalDispatcher: typeof import('./global-dispatcher').getGlobalDispatcher;
+  var request: typeof import('./api').request;
+  var stream: typeof import('./api').stream;
+  var pipeline: typeof import('./api').pipeline;
+  var connect: typeof import('./api').connect;
+  var upgrade: typeof import('./api').upgrade;
+  var MockClient: typeof import('./mock-client').default;
+  var MockPool: typeof import('./mock-pool').default;
+  var MockAgent: typeof import('./mock-agent').default;
+  var mockErrors: typeof import('./mock-errors').default;
+  var fetch: typeof import('./fetch').fetch;
+  var Headers: typeof import('./fetch').Headers;
+  var Response: typeof import('./fetch').Response;
+  var Request: typeof import('./fetch').Request;
+  var FormData: typeof import('./formdata').FormData;
+  var File: typeof import('./file').File;
+  var FileReader: typeof import('./filereader').FileReader;
+  var caches: typeof import('./cache').caches;
+  var interceptors: typeof import('./interceptors').default;
 }
-
-export interface RouteProps<
-  T extends DefaultParams | undefined = undefined,
-  RoutePath extends Path = Path
-> {
-  children?:
-    | ((
-        params: T extends DefaultParams ? T : ExtractRouteParams<RoutePath>
-      ) => ComponentChildren)
-    | ComponentChildren;
-  path?: RoutePath;
-  component?: ComponentType<
-    RouteComponentProps<
-      T extends DefaultParams ? T : ExtractRouteParams<RoutePath>
-    >
-  >;
-}
-
-export function Route<
-  T extends DefaultParams | undefined = undefined,
-  RoutePath extends Path = Path
->(props: RouteProps<T, RoutePath>): VNode<any> | null;
-
-/*
- * Components: <Link /> & <Redirect />
- */
-
-export type NavigationalProps<H extends BaseLocationHook = LocationHook> = (
-  | { to: Path; href?: never }
-  | { href: Path; to?: never }
-) &
-  HookNavigationOptions<H>;
-
-export type LinkProps<H extends BaseLocationHook = LocationHook> = Omit<
-  JSX.HTMLAttributes,
-  "href"
-> &
-  NavigationalProps<H>;
-
-export type RedirectProps<H extends BaseLocationHook = LocationHook> =
-  NavigationalProps<H> & {
-    children?: never;
-  };
-
-export function Redirect<H extends BaseLocationHook = LocationHook>(
-  props: RedirectProps<H>,
-  context?: any
-): VNode<any> | null;
-export function Link<H extends BaseLocationHook = LocationHook>(
-  props: LinkProps<H>,
-  context?: any
-): VNode<any> | null;
-
-/*
- * Components: <Switch />
- */
-
-export interface SwitchProps {
-  location?: string;
-  children: Array<VNode<RouteProps>>;
-}
-export const Switch: FunctionComponent<SwitchProps>;
-
-/*
- * Components: <Router />
- */
-
-export type RouterProps = RouterOptions & {
-  children: ComponentChildren;
-};
-
-export const Router: FunctionComponent<RouterProps>;
-
-/*
- * Hooks
- */
-
-export function useRouter(): RouterObject;
-
-export function useRoute<
-  T extends DefaultParams | undefined = undefined,
-  RoutePath extends Path = Path
->(
-  pattern: RoutePath
-): Match<T extends DefaultParams ? T : ExtractRouteParams<RoutePath>>;
-
-export function useLocation<
-  H extends BaseLocationHook = LocationHook
->(): HookReturnValue<H>;
-
-export function useParams<T extends DefaultParams = DefaultParams>(): Params<T>;
-
-// tslint:enable:no-unnecessary-generics

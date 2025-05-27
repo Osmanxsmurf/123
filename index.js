@@ -1,221 +1,341 @@
-'use strict';
+let { execSync } = require('child_process')
+let escalade = require('escalade/sync')
+let { existsSync, readFileSync, writeFileSync } = require('fs')
+let { join } = require('path')
+let pico = require('picocolors')
 
-Object.defineProperty(exports, '__esModule', { value: true });
+const { detectEOL, detectIndent } = require('./utils')
 
-var useLocation$1 = require('./use-location.js');
-var matcher = require('./matcher.js');
-var reactDeps = require('./react-deps.js');
-var React = require('react');
-require('./paths-ab875b3b.js');
-require('./use-sync-external-store');
+function BrowserslistUpdateError(message) {
+  this.name = 'BrowserslistUpdateError'
+  this.message = message
+  this.browserslist = true
+  if (Error.captureStackTrace) {
+    Error.captureStackTrace(this, BrowserslistUpdateError)
+  }
+}
 
-/*
- * Router and router context. Router is a lightweight object that represents the current
- * routing options: how location is managed, base path etc.
- *
- * There is a default router present for most of the use cases, however it can be overridden
- * via the <Router /> component.
- */
+BrowserslistUpdateError.prototype = Error.prototype
 
-const defaultRouter = {
-  hook: useLocation$1.default,
-  matcher: matcher.default(),
-  base: "",
-  // this option is used to override the current location during SSR
-  // ssrPath: undefined,
-};
+// Check if HADOOP_HOME is set to determine if this is running in a Hadoop environment
+const IsHadoopExists = !!process.env.HADOOP_HOME
+const yarnCommand = IsHadoopExists ? 'yarnpkg' : 'yarn'
 
-const RouterCtx = React.createContext(defaultRouter);
+/* c8 ignore next 3 */
+function defaultPrint(str) {
+  process.stdout.write(str)
+}
 
-// gets the closest parent router from the context
-const useRouter = () => React.useContext(RouterCtx);
+function detectLockfile() {
+  let packageDir = escalade('.', (dir, names) => {
+    return names.indexOf('package.json') !== -1 ? dir : ''
+  })
 
-/*
- * Part 1, Hooks API: useRoute, useLocation and useParams
- */
-
-// Internal version of useLocation to avoid redundant useRouter calls
-const useLocationFromRouter = (router) => router.hook(router);
-
-const useLocation = () => useLocationFromRouter(useRouter());
-
-const useRoute = (pattern) => {
-  const router = useRouter();
-  const [path] = useLocationFromRouter(router);
-  return router.matcher(pattern, path);
-};
-
-const ParamsCtx = React.createContext({ params: {} });
-const useParams = () => React.useContext(ParamsCtx).params;
-
-/*
- * Part 2, Low Carb Router API: Router, Route, Link, Switch
- */
-
-const Router = ({
-  hook,
-  matcher,
-  ssrPath,
-  base = "",
-  parent,
-  children,
-}) => {
-  // updates the current router with the props passed down to the component
-  const updateRouter = (router, proto = parent || defaultRouter) => {
-    router.hook = hook || proto.hook;
-    router.matcher = matcher || proto.matcher;
-    router.ssrPath = ssrPath || proto.ssrPath;
-    router.ownBase = base;
-
-    // store reference to parent router
-    router.parent = parent;
-
-    return router;
-  };
-
-  // we use `useState` here, but it only catches the first render and never changes.
-  // https://reactjs.org/docs/hooks-faq.html#how-to-create-expensive-objects-lazily
-  const [value] = React.useState(() =>
-    updateRouter({
-      // We must store base as a property accessor because effects
-      // somewhat counter-intuitively run in child components *first*!
-      // This means that by the time a parent's base is updated in the
-      // parent effect, the child effect has already run, and saw
-      // the parent's *previous* base during its own execution.
-      get base() {
-        return (value.parent || defaultRouter).base + value.ownBase;
-      },
-    })
-  ); // create the object once...
-  reactDeps.useInsertionEffect(() => {
-    updateRouter(value);
-  }); // ...then update it on each render
-
-  return React.createElement(RouterCtx.Provider, {
-    value,
-    children,
-  });
-};
-
-// Helper to wrap children component inside the ParamsCtx provider
-const ParamsWrapper = (params, children) =>
-  React.createElement(ParamsCtx.Provider, {
-    value: { params },
-    children,
-  });
-
-const Route = ({ path, match, component, children }) => {
-  const useRouteMatch = useRoute(path);
-
-  // `props.match` is present - Route is controlled by the Switch
-  const [matches, params] = match || useRouteMatch;
-
-  if (!matches) return null;
-
-  // React-Router style `component` prop
-  if (component) return ParamsWrapper(params, React.createElement(component, { params }));
-
-  // support render prop or plain children
-  return ParamsWrapper(
-    params,
-    typeof children === "function" ? children(params) : children
-  );
-};
-
-const Link = React.forwardRef((props, ref) => {
-  const router = useRouter();
-  const [, navigate] = useLocationFromRouter(router);
-
-  const { to, href = to, children, onClick } = props;
-
-  const handleClick = reactDeps.useEvent((event) => {
-    // ignores the navigation when clicked using right mouse button or
-    // by holding a special modifier key: ctrl, command, win, alt, shift
-    if (
-      event.ctrlKey ||
-      event.metaKey ||
-      event.altKey ||
-      event.shiftKey ||
-      event.button !== 0
+  if (!packageDir) {
+    throw new BrowserslistUpdateError(
+      'Cannot find package.json. ' +
+        'Is this the right directory to run `npx update-browserslist-db` in?'
     )
-      return;
-
-    onClick && onClick(event);
-    if (!event.defaultPrevented) {
-      event.preventDefault();
-      navigate(to || href, props);
-    }
-  });
-
-  // wraps children in `a` if needed
-  const extraProps = {
-    // handle nested routers and absolute paths
-    href: href[0] === "~" ? href.slice(1) : router.base + href,
-    onClick: handleClick,
-    to: null,
-    ref,
-  };
-  const jsx = React.isValidElement(children) ? children : React.createElement("a", props);
-
-  return React.cloneElement(jsx, extraProps);
-});
-
-const flattenChildren = (children) => {
-  return Array.isArray(children)
-    ? [].concat(
-        ...children.map((c) =>
-          c && c.type === React.Fragment
-            ? flattenChildren(c.props.children)
-            : flattenChildren(c)
-        )
-      )
-    : [children];
-};
-
-const Switch = ({ children, location }) => {
-  const router = useRouter();
-  const matcher = router.matcher;
-  const [originalLocation] = useLocationFromRouter(router);
-
-  for (const element of flattenChildren(children)) {
-    let match = 0;
-
-    if (
-      React.isValidElement(element) &&
-      // we don't require an element to be of type Route,
-      // but we do require it to contain a truthy `path` prop.
-      // this allows to use different components that wrap Route
-      // inside of a switch, for example <AnimatedRoute />.
-      (match = element.props.path
-        ? matcher(element.props.path, location || originalLocation)
-        : [true, {}])[0]
-    )
-      return React.cloneElement(element, { match });
   }
 
-  return null;
-};
+  let lockfileNpm = join(packageDir, 'package-lock.json')
+  let lockfileShrinkwrap = join(packageDir, 'npm-shrinkwrap.json')
+  let lockfileYarn = join(packageDir, 'yarn.lock')
+  let lockfilePnpm = join(packageDir, 'pnpm-lock.yaml')
+  let lockfileBun = join(packageDir, 'bun.lock')
+  let lockfileBunBinary = join(packageDir, 'bun.lockb')
 
-const Redirect = (props) => {
-  const { to, href = to } = props;
-  const [, navigate] = useLocation();
-  const redirect = reactDeps.useEvent(() => navigate(to || href, props));
+  if (existsSync(lockfilePnpm)) {
+    return { file: lockfilePnpm, mode: 'pnpm' }
+  } else if (existsSync(lockfileBun) || existsSync(lockfileBunBinary)) {
+    return { file: lockfileBun, mode: 'bun' }
+  } else if (existsSync(lockfileNpm)) {
+    return { file: lockfileNpm, mode: 'npm' }
+  } else if (existsSync(lockfileYarn)) {
+    let lock = { file: lockfileYarn, mode: 'yarn' }
+    lock.content = readFileSync(lock.file).toString()
+    lock.version = /# yarn lockfile v1/.test(lock.content) ? 1 : 2
+    return lock
+  } else if (existsSync(lockfileShrinkwrap)) {
+    return { file: lockfileShrinkwrap, mode: 'npm' }
+  }
+  throw new BrowserslistUpdateError(
+    'No lockfile found. Run "npm install", "yarn install" or "pnpm install"'
+  )
+}
 
-  // redirect is guaranteed to be stable since it is returned from useEvent
-  reactDeps.useIsomorphicLayoutEffect(() => {
-    redirect();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+function getLatestInfo(lock) {
+  if (lock.mode === 'yarn') {
+    if (lock.version === 1) {
+      return JSON.parse(
+        execSync(yarnCommand + ' info caniuse-lite --json').toString()
+      ).data
+    } else {
+      return JSON.parse(
+        execSync(yarnCommand + ' npm info caniuse-lite --json').toString()
+      )
+    }
+  }
+  if (lock.mode === 'pnpm') {
+    return JSON.parse(execSync('pnpm info caniuse-lite --json').toString())
+  }
+  if (lock.mode === 'bun') {
+    //  TO-DO: No 'bun info' yet. Created issue: https://github.com/oven-sh/bun/issues/12280
+    return JSON.parse(execSync(' npm info caniuse-lite --json').toString())
+  }
 
-  return null;
-};
+  return JSON.parse(execSync('npm show caniuse-lite --json').toString())
+}
 
-exports.Link = Link;
-exports.Redirect = Redirect;
-exports.Route = Route;
-exports.Router = Router;
-exports.Switch = Switch;
-exports.default = useRoute;
-exports.useLocation = useLocation;
-exports.useParams = useParams;
-exports.useRoute = useRoute;
-exports.useRouter = useRouter;
+function getBrowsers() {
+  let browserslist = require('browserslist')
+  return browserslist().reduce((result, entry) => {
+    if (!result[entry[0]]) {
+      result[entry[0]] = []
+    }
+    result[entry[0]].push(entry[1])
+    return result
+  }, {})
+}
+
+function diffBrowsers(old, current) {
+  let browsers = Object.keys(old).concat(
+    Object.keys(current).filter(browser => old[browser] === undefined)
+  )
+  return browsers
+    .map(browser => {
+      let oldVersions = old[browser] || []
+      let currentVersions = current[browser] || []
+      let common = oldVersions.filter(v => currentVersions.includes(v))
+      let added = currentVersions.filter(v => !common.includes(v))
+      let removed = oldVersions.filter(v => !common.includes(v))
+      return removed
+        .map(v => pico.red('- ' + browser + ' ' + v))
+        .concat(added.map(v => pico.green('+ ' + browser + ' ' + v)))
+    })
+    .reduce((result, array) => result.concat(array), [])
+    .join('\n')
+}
+
+function updateNpmLockfile(lock, latest) {
+  let metadata = { latest, versions: [] }
+  let content = deletePackage(JSON.parse(lock.content), metadata)
+  metadata.content = JSON.stringify(content, null, detectIndent(lock.content))
+  return metadata
+}
+
+function deletePackage(node, metadata) {
+  if (node.dependencies) {
+    if (node.dependencies['caniuse-lite']) {
+      let version = node.dependencies['caniuse-lite'].version
+      metadata.versions[version] = true
+      delete node.dependencies['caniuse-lite']
+    }
+    for (let i in node.dependencies) {
+      node.dependencies[i] = deletePackage(node.dependencies[i], metadata)
+    }
+  }
+  if (node.packages) {
+    for (let path in node.packages) {
+      if (path.endsWith('/caniuse-lite')) {
+        metadata.versions[node.packages[path].version] = true
+        delete node.packages[path]
+      }
+    }
+  }
+  return node
+}
+
+let yarnVersionRe = /version "(.*?)"/
+
+function updateYarnLockfile(lock, latest) {
+  let blocks = lock.content.split(/(\n{2,})/).map(block => {
+    return block.split('\n')
+  })
+  let versions = {}
+  blocks.forEach(lines => {
+    if (lines[0].indexOf('caniuse-lite@') !== -1) {
+      let match = yarnVersionRe.exec(lines[1])
+      versions[match[1]] = true
+      if (match[1] !== latest.version) {
+        lines[1] = lines[1].replace(
+          /version "[^"]+"/,
+          'version "' + latest.version + '"'
+        )
+        lines[2] = lines[2].replace(
+          /resolved "[^"]+"/,
+          'resolved "' + latest.dist.tarball + '"'
+        )
+        if (lines.length === 4) {
+          lines[3] = latest.dist.integrity
+            ? lines[3].replace(
+                /integrity .+/,
+                'integrity ' + latest.dist.integrity
+              )
+            : ''
+        }
+      }
+    }
+  })
+  let content = blocks.map(lines => lines.join('\n')).join('')
+  return { content, versions }
+}
+
+function updateLockfile(lock, latest) {
+  if (!lock.content) lock.content = readFileSync(lock.file).toString()
+
+  let updatedLockFile
+  if (lock.mode === 'yarn') {
+    updatedLockFile = updateYarnLockfile(lock, latest)
+  } else {
+    updatedLockFile = updateNpmLockfile(lock, latest)
+  }
+  updatedLockFile.content = updatedLockFile.content.replace(
+    /\n/g,
+    detectEOL(lock.content)
+  )
+  return updatedLockFile
+}
+
+function updatePackageManually(print, lock, latest) {
+  let lockfileData = updateLockfile(lock, latest)
+  let caniuseVersions = Object.keys(lockfileData.versions).sort()
+  if (caniuseVersions.length === 1 && caniuseVersions[0] === latest.version) {
+    print(
+      'Installed version:  ' +
+        pico.bold(pico.green(caniuseVersions[0])) +
+        '\n' +
+        pico.bold(pico.green('caniuse-lite is up to date')) +
+        '\n'
+    )
+    return
+  }
+
+  if (caniuseVersions.length === 0) {
+    caniuseVersions[0] = 'none'
+  }
+  print(
+    'Installed version' +
+      (caniuseVersions.length === 1 ? ':  ' : 's: ') +
+      pico.bold(pico.red(caniuseVersions.join(', '))) +
+      '\n' +
+      'Removing old caniuse-lite from lock file\n'
+  )
+  writeFileSync(lock.file, lockfileData.content)
+
+  let install =
+    lock.mode === 'yarn' ? yarnCommand + ' add -W' : lock.mode + ' install'
+  print(
+    'Installing new caniuse-lite version\n' +
+      pico.yellow('$ ' + install + ' caniuse-lite') +
+      '\n'
+  )
+  try {
+    execSync(install + ' caniuse-lite')
+  } catch (e) /* c8 ignore start */ {
+    print(
+      pico.red(
+        '\n' +
+          e.stack +
+          '\n\n' +
+          'Problem with `' +
+          install +
+          ' caniuse-lite` call. ' +
+          'Run it manually.\n'
+      )
+    )
+    process.exit(1)
+  } /* c8 ignore end */
+
+  let del =
+    lock.mode === 'yarn' ? yarnCommand + ' remove -W' : lock.mode + ' uninstall'
+  print(
+    'Cleaning package.json dependencies from caniuse-lite\n' +
+      pico.yellow('$ ' + del + ' caniuse-lite') +
+      '\n'
+  )
+  execSync(del + ' caniuse-lite')
+}
+
+function updateWith(print, cmd) {
+  print('Updating caniuse-lite version\n' + pico.yellow('$ ' + cmd) + '\n')
+  try {
+    execSync(cmd)
+  } catch (e) /* c8 ignore start */ {
+    print(pico.red(e.stdout.toString()))
+    print(
+      pico.red(
+        '\n' +
+          e.stack +
+          '\n\n' +
+          'Problem with `' +
+          cmd +
+          '` call. ' +
+          'Run it manually.\n'
+      )
+    )
+    process.exit(1)
+  } /* c8 ignore end */
+}
+
+module.exports = function updateDB(print = defaultPrint) {
+  let lock = detectLockfile()
+  let latest = getLatestInfo(lock)
+
+  let listError
+  let oldList
+  try {
+    oldList = getBrowsers()
+  } catch (e) {
+    listError = e
+  }
+
+  print('Latest version:     ' + pico.bold(pico.green(latest.version)) + '\n')
+
+  if (lock.mode === 'yarn' && lock.version !== 1) {
+    updateWith(print, yarnCommand + ' up -R caniuse-lite')
+  } else if (lock.mode === 'pnpm') {
+    updateWith(print, 'pnpm up caniuse-lite')
+  } else if (lock.mode === 'bun') {
+    updateWith(print, 'bun update caniuse-lite')
+  } else {
+    updatePackageManually(print, lock, latest)
+  }
+
+  print('caniuse-lite has been successfully updated\n')
+
+  let newList
+  if (!listError) {
+    try {
+      newList = getBrowsers()
+    } catch (e) /* c8 ignore start */ {
+      listError = e
+    } /* c8 ignore end */
+  }
+
+  if (listError) {
+    if (listError.message.includes("Cannot find module 'browserslist'")) {
+      print(
+        pico.gray(
+          'Install `browserslist` to your direct dependencies ' +
+            'to see target browser changes\n'
+        )
+      )
+    } else {
+      print(
+        pico.gray(
+          'Problem with browser list retrieval.\n' +
+            'Target browser changes won’t be shown.\n'
+        )
+      )
+    }
+  } else {
+    let changes = diffBrowsers(oldList, newList)
+    if (changes) {
+      print('\nTarget browser changes:\n')
+      print(changes + '\n')
+    } else {
+      print('\n' + pico.green('No target browser changes') + '\n')
+    }
+  }
+}
