@@ -1,19 +1,78 @@
-'use strict';
-const shebangRegex = require('shebang-regex');
+var fs = require('fs');
+var path = require('path');
+var pify = require('pify');
 
-module.exports = (string = '') => {
-	const match = string.match(shebangRegex);
+var stat = pify(fs.stat);
+var readFile = pify(fs.readFile);
+var resolve = path.resolve;
 
-	if (!match) {
-		return null;
+var cache = Object.create(null);
+
+function convert(content, encoding) {
+	if (Buffer.isEncoding(encoding)) {
+		return content.toString(encoding);
+	}
+	return content;
+}
+
+module.exports = function (path, encoding) {
+	path = resolve(path);
+
+	return stat(path).then(function (stats) {
+		var item = cache[path];
+
+		if (item && item.mtime.getTime() === stats.mtime.getTime()) {
+			return convert(item.content, encoding);
+		}
+
+		return readFile(path).then(function (data) {
+			cache[path] = {
+				mtime: stats.mtime,
+				content: data
+			};
+
+			return convert(data, encoding);
+		});
+	}).catch(function (err) {
+		cache[path] = null;
+		return Promise.reject(err);
+	});
+};
+
+module.exports.sync = function (path, encoding) {
+	path = resolve(path);
+
+	try {
+		var stats = fs.statSync(path);
+		var item = cache[path];
+
+		if (item && item.mtime.getTime() === stats.mtime.getTime()) {
+			return convert(item.content, encoding);
+		}
+
+		var data = fs.readFileSync(path);
+
+		cache[path] = {
+			mtime: stats.mtime,
+			content: data
+		};
+
+		return convert(data, encoding);
+	} catch (err) {
+		cache[path] = null;
+		throw err;
 	}
 
-	const [path, argument] = match[0].replace(/#! ?/, '').split(' ');
-	const binary = path.split('/').pop();
+};
 
-	if (binary === 'env') {
-		return argument;
+module.exports.get = function (path, encoding) {
+	path = resolve(path);
+	if (cache[path]) {
+		return convert(cache[path].content, encoding);
 	}
+	return null;
+};
 
-	return argument ? `${binary} ${argument}` : binary;
+module.exports.clear = function () {
+	cache = Object.create(null);
 };

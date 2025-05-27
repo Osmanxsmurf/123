@@ -1,17 +1,11 @@
 {
   "compilerOptions": {
-    "lib": ["es6", "dom"],
-    "jsx": "react",
-    "jsxFactory": "h",
+    "target": "es6",
+    "module": "commonjs",
     "noEmit": true,
-    "strict": true,
-    "baseUrl": ".",
-    "paths": {
-      "wouter/preact": ["."],
-      "wouter/use-location": ["../use-location"],
-      "wouter/static-location": ["../static-location"],
-      "wouter/matcher": ["../matcher"]
-    }
+    "strict": true
   },
-  "files": ["./type-specs.tsx"]
+  "files": [
+    "./reusify.d.ts"
+  ]
 }
