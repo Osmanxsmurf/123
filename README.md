@@ -1,45 +1,5 @@
-react-style-singleton
-====
+# react-refresh
 
-__300b__ with all dependencies, minified and gzipped
+This package implements the wiring necessary to integrate Fast Refresh into bundlers. Fast Refresh is a feature that lets you edit React components in a running application without losing their state. It is similar to an old feature known as "hot reloading", but Fast Refresh is more reliable and officially supported by React.
 
-
-Creates a style component with internal _tracker_.
-- Adds styles to the browser on the __first__ instance mount.
-- Removes after the __last__ instance unmount.
-- Thus helps you deliver styles you need to the customer, and clean up later.
-- Is not server-side rendering compatible!
-
-
-# API
-
-## Component
-
-```js
-import {styleSingleton} from 'react-style-singleton'
-
-const Style = styleSingleton();
-
-export const App = () => (
-  <Style styles={'body {color:red}'} />
-);
-```
-
-## Hook
-
-```js
-import {styleHookSingleton} from 'react-style-singleton';
-
-const useStyle = styleHookSingleton();
-const useAnotherStyle = styleHookSingleton();
-
-export const App = () => {
-  useStyle('div {color:red}');
-  useAnotherStyle('body { background-color:red }');
-  return (<div />);
-}
-```
-
-# License
-
-MIT
+This package is primarily aimed at developers of bundler plugins. If you’re working on one, here is a [rough guide](https://github.com/facebook/react/issues/16604#issuecomment-528663101) for Fast Refresh integration using this package.
