@@ -1,25 +1,41 @@
-export { Composer } from './compose/composer';
-export { Document } from './doc/Document';
-export { Schema } from './schema/Schema';
-export type { ErrorCode } from './errors';
-export { YAMLError, YAMLParseError, YAMLWarning } from './errors';
-export { Alias } from './nodes/Alias';
-export { isAlias, isCollection, isDocument, isMap, isNode, isPair, isScalar, isSeq } from './nodes/identity';
-export type { Node, ParsedNode, Range } from './nodes/Node';
-export { Pair } from './nodes/Pair';
-export { Scalar } from './nodes/Scalar';
-export { YAMLMap } from './nodes/YAMLMap';
-export { YAMLSeq } from './nodes/YAMLSeq';
-export type { CreateNodeOptions, DocumentOptions, ParseOptions, SchemaOptions, ToJSOptions, ToStringOptions } from './options';
-export * as CST from './parse/cst';
-export { Lexer } from './parse/lexer';
-export { LineCounter } from './parse/line-counter';
-export { Parser } from './parse/parser';
-export type { EmptyStream } from './public-api';
-export { parse, parseAllDocuments, parseDocument, stringify } from './public-api';
-export type { TagId, Tags } from './schema/tags';
-export type { CollectionTag, ScalarTag } from './schema/types';
-export type { YAMLOMap } from './schema/yaml-1.1/omap';
-export type { YAMLSet } from './schema/yaml-1.1/set';
-export type { asyncVisitor, asyncVisitorFn, visitor, visitorFn } from './visit';
-export { visit, visitAsync } from './visit';
+export type Options = {
+	/**
+	By default the wrap is soft, meaning long words may extend past the column width. Setting this to `true` will make it hard wrap at the column width.
+
+	@default false
+	*/
+	readonly hard?: boolean;
+
+	/**
+	By default, an attempt is made to split words at spaces, ensuring that they don't extend past the configured columns. If wordWrap is `false`, each column will instead be completely filled splitting words as necessary.
+
+	@default true
+	*/
+	readonly wordWrap?: boolean;
+
+	/**
+	Whitespace on all lines is removed by default. Set this option to `false` if you don't want to trim.
+
+	@default true
+	*/
+	readonly trim?: boolean;
+};
+
+/**
+Wrap words to the specified column width.
+
+@param string - String with ANSI escape codes. Like one styled by [`chalk`](https://github.com/chalk/chalk). Newline characters will be normalized to `\n`.
+@param columns - Number of columns to wrap the text to.
+
+@example
+```
+import chalk from 'chalk';
+import wrapAnsi from 'wrap-ansi';
+
+const input = 'The quick brown ' + chalk.red('fox jumped over ') +
+	'the lazy ' + chalk.green('dog and then ran away with the unicorn.');
+
+console.log(wrapAnsi(input, 20));
+```
+*/
+export default function wrapAnsi(string: string, columns: number, options?: Options): string;
