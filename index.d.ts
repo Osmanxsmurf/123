@@ -1,41 +1,156 @@
-export type Options = {
-	/**
-	By default the wrap is soft, meaning long words may extend past the column width. Setting this to `true` will make it hard wrap at the column width.
+// Minimum TypeScript Version: 4.1
+// tslint:disable:no-unnecessary-generics
 
-	@default false
-	*/
-	readonly hard?: boolean;
+import {
+  JSX,
+  FunctionComponent,
+  ComponentType,
+  ComponentChildren,
+  VNode,
+} from "preact";
 
-	/**
-	By default, an attempt is made to split words at spaces, ensuring that they don't extend past the configured columns. If wordWrap is `false`, each column will instead be completely filled splitting words as necessary.
+import {
+  Path,
+  BaseLocationHook,
+  HookReturnValue,
+  HookNavigationOptions,
+  LocationHook,
+} from "../use-location";
 
-	@default true
-	*/
-	readonly wordWrap?: boolean;
+import { DefaultParams, Match } from "../matcher";
+import { RouterObject, RouterOptions } from "../router";
 
-	/**
-	Whitespace on all lines is removed by default. Set this option to `false` if you don't want to trim.
+// re-export some types from these modules
+export {
+  DefaultParams,
+  Params,
+  MatchWithParams,
+  NoMatch,
+  Match,
+} from "../matcher";
+export { Path, BaseLocationHook, LocationHook } from "../use-location";
+export * from "../router";
 
-	@default true
-	*/
-	readonly trim?: boolean;
+export type ExtractRouteOptionalParam<PathType extends Path> =
+  PathType extends `${infer Param}?`
+    ? { readonly [k in Param]: string | undefined }
+    : PathType extends `${infer Param}*`
+    ? { readonly [k in Param]: string | undefined }
+    : PathType extends `${infer Param}+`
+    ? { readonly [k in Param]: string }
+    : { readonly [k in PathType]: string };
+
+export type ExtractRouteParams<PathType extends string> =
+  string extends PathType
+    ? DefaultParams
+    : PathType extends `${infer _Start}:${infer ParamWithOptionalRegExp}/${infer Rest}`
+    ? ParamWithOptionalRegExp extends `${infer Param}(${infer _RegExp})`
+      ? ExtractRouteOptionalParam<Param> & ExtractRouteParams<Rest>
+      : ExtractRouteOptionalParam<ParamWithOptionalRegExp> &
+          ExtractRouteParams<Rest>
+    : PathType extends `${infer _Start}:${infer ParamWithOptionalRegExp}`
+    ? ParamWithOptionalRegExp extends `${infer Param}(${infer _RegExp})`
+      ? ExtractRouteOptionalParam<Param>
+      : ExtractRouteOptionalParam<ParamWithOptionalRegExp>
+    : {};
+
+/*
+ * Components: <Route />
+ */
+
+export interface RouteComponentProps<T extends DefaultParams = DefaultParams> {
+  params: T;
+}
+
+export interface RouteProps<
+  T extends DefaultParams | undefined = undefined,
+  RoutePath extends Path = Path
+> {
+  children?:
+    | ((
+        params: T extends DefaultParams ? T : ExtractRouteParams<RoutePath>
+      ) => ComponentChildren)
+    | ComponentChildren;
+  path?: RoutePath;
+  component?: ComponentType<
+    RouteComponentProps<
+      T extends DefaultParams ? T : ExtractRouteParams<RoutePath>
+    >
+  >;
+}
+
+export function Route<
+  T extends DefaultParams | undefined = undefined,
+  RoutePath extends Path = Path
+>(props: RouteProps<T, RoutePath>): VNode<any> | null;
+
+/*
+ * Components: <Link /> & <Redirect />
+ */
+
+export type NavigationalProps<H extends BaseLocationHook = LocationHook> = (
+  | { to: Path; href?: never }
+  | { href: Path; to?: never }
+) &
+  HookNavigationOptions<H>;
+
+export type LinkProps<H extends BaseLocationHook = LocationHook> = Omit<
+  JSX.HTMLAttributes,
+  "href"
+> &
+  NavigationalProps<H>;
+
+export type RedirectProps<H extends BaseLocationHook = LocationHook> =
+  NavigationalProps<H> & {
+    children?: never;
+  };
+
+export function Redirect<H extends BaseLocationHook = LocationHook>(
+  props: RedirectProps<H>,
+  context?: any
+): VNode<any> | null;
+export function Link<H extends BaseLocationHook = LocationHook>(
+  props: LinkProps<H>,
+  context?: any
+): VNode<any> | null;
+
+/*
+ * Components: <Switch />
+ */
+
+export interface SwitchProps {
+  location?: string;
+  children: Array<VNode<RouteProps>>;
+}
+export const Switch: FunctionComponent<SwitchProps>;
+
+/*
+ * Components: <Router />
+ */
+
+export type RouterProps = RouterOptions & {
+  children: ComponentChildren;
 };
 
-/**
-Wrap words to the specified column width.
+export const Router: FunctionComponent<RouterProps>;
 
-@param string - String with ANSI escape codes. Like one styled by [`chalk`](https://github.com/chalk/chalk). Newline characters will be normalized to `\n`.
-@param columns - Number of columns to wrap the text to.
+/*
+ * Hooks
+ */
 
-@example
-```
-import chalk from 'chalk';
-import wrapAnsi from 'wrap-ansi';
+export function useRouter(): RouterObject;
 
-const input = 'The quick brown ' + chalk.red('fox jumped over ') +
-	'the lazy ' + chalk.green('dog and then ran away with the unicorn.');
+export function useRoute<
+  T extends DefaultParams | undefined = undefined,
+  RoutePath extends Path = Path
+>(
+  pattern: RoutePath
+): Match<T extends DefaultParams ? T : ExtractRouteParams<RoutePath>>;
 
-console.log(wrapAnsi(input, 20));
-```
-*/
-export default function wrapAnsi(string: string, columns: number, options?: Options): string;
+export function useLocation<
+  H extends BaseLocationHook = LocationHook
+>(): HookReturnValue<H>;
+
+export function useParams<T extends DefaultParams = DefaultParams>(): Params<T>;
+
+// tslint:enable:no-unnecessary-generics

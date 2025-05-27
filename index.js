@@ -1,19 +1,13 @@
-import locationHook from "./use-location.js";
-import matcherWithCache from "./matcher.js";
+'use strict';
 
-import {
-  useContext,
-  createContext,
-  isValidElement,
-  cloneElement,
-  createElement as h,
-  Fragment,
-  useState,
-  forwardRef,
-  useIsomorphicLayoutEffect,
-  useEvent,
-  useInsertionEffect,
-} from "./react-deps.js";
+Object.defineProperty(exports, '__esModule', { value: true });
+
+var useLocation$1 = require('./use-location.js');
+var matcher = require('./matcher.js');
+var reactDeps = require('./react-deps.js');
+var React = require('react');
+require('./paths-ab875b3b.js');
+require('./use-sync-external-store');
 
 /*
  * Router and router context. Router is a lightweight object that represents the current
@@ -24,17 +18,17 @@ import {
  */
 
 const defaultRouter = {
-  hook: locationHook,
-  matcher: matcherWithCache(),
+  hook: useLocation$1.default,
+  matcher: matcher.default(),
   base: "",
   // this option is used to override the current location during SSR
   // ssrPath: undefined,
 };
 
-const RouterCtx = createContext(defaultRouter);
+const RouterCtx = React.createContext(defaultRouter);
 
 // gets the closest parent router from the context
-export const useRouter = () => useContext(RouterCtx);
+const useRouter = () => React.useContext(RouterCtx);
 
 /*
  * Part 1, Hooks API: useRoute, useLocation and useParams
@@ -43,22 +37,22 @@ export const useRouter = () => useContext(RouterCtx);
 // Internal version of useLocation to avoid redundant useRouter calls
 const useLocationFromRouter = (router) => router.hook(router);
 
-export const useLocation = () => useLocationFromRouter(useRouter());
+const useLocation = () => useLocationFromRouter(useRouter());
 
-export const useRoute = (pattern) => {
+const useRoute = (pattern) => {
   const router = useRouter();
   const [path] = useLocationFromRouter(router);
   return router.matcher(pattern, path);
 };
 
-const ParamsCtx = createContext({ params: {} });
-export const useParams = () => useContext(ParamsCtx).params;
+const ParamsCtx = React.createContext({ params: {} });
+const useParams = () => React.useContext(ParamsCtx).params;
 
 /*
  * Part 2, Low Carb Router API: Router, Route, Link, Switch
  */
 
-export const Router = ({
+const Router = ({
   hook,
   matcher,
   ssrPath,
@@ -81,7 +75,7 @@ export const Router = ({
 
   // we use `useState` here, but it only catches the first render and never changes.
   // https://reactjs.org/docs/hooks-faq.html#how-to-create-expensive-objects-lazily
-  const [value] = useState(() =>
+  const [value] = React.useState(() =>
     updateRouter({
       // We must store base as a property accessor because effects
       // somewhat counter-intuitively run in child components *first*!
@@ -93,11 +87,11 @@ export const Router = ({
       },
     })
   ); // create the object once...
-  useInsertionEffect(() => {
+  reactDeps.useInsertionEffect(() => {
     updateRouter(value);
   }); // ...then update it on each render
 
-  return h(RouterCtx.Provider, {
+  return React.createElement(RouterCtx.Provider, {
     value,
     children,
   });
@@ -105,12 +99,12 @@ export const Router = ({
 
 // Helper to wrap children component inside the ParamsCtx provider
 const ParamsWrapper = (params, children) =>
-  h(ParamsCtx.Provider, {
+  React.createElement(ParamsCtx.Provider, {
     value: { params },
     children,
   });
 
-export const Route = ({ path, match, component, children }) => {
+const Route = ({ path, match, component, children }) => {
   const useRouteMatch = useRoute(path);
 
   // `props.match` is present - Route is controlled by the Switch
@@ -119,7 +113,7 @@ export const Route = ({ path, match, component, children }) => {
   if (!matches) return null;
 
   // React-Router style `component` prop
-  if (component) return ParamsWrapper(params, h(component, { params }));
+  if (component) return ParamsWrapper(params, React.createElement(component, { params }));
 
   // support render prop or plain children
   return ParamsWrapper(
@@ -128,13 +122,13 @@ export const Route = ({ path, match, component, children }) => {
   );
 };
 
-export const Link = forwardRef((props, ref) => {
+const Link = React.forwardRef((props, ref) => {
   const router = useRouter();
   const [, navigate] = useLocationFromRouter(router);
 
   const { to, href = to, children, onClick } = props;
 
-  const handleClick = useEvent((event) => {
+  const handleClick = reactDeps.useEvent((event) => {
     // ignores the navigation when clicked using right mouse button or
     // by holding a special modifier key: ctrl, command, win, alt, shift
     if (
@@ -161,16 +155,16 @@ export const Link = forwardRef((props, ref) => {
     to: null,
     ref,
   };
-  const jsx = isValidElement(children) ? children : h("a", props);
+  const jsx = React.isValidElement(children) ? children : React.createElement("a", props);
 
-  return cloneElement(jsx, extraProps);
+  return React.cloneElement(jsx, extraProps);
 });
 
 const flattenChildren = (children) => {
   return Array.isArray(children)
     ? [].concat(
         ...children.map((c) =>
-          c && c.type === Fragment
+          c && c.type === React.Fragment
             ? flattenChildren(c.props.children)
             : flattenChildren(c)
         )
@@ -178,7 +172,7 @@ const flattenChildren = (children) => {
     : [children];
 };
 
-export const Switch = ({ children, location }) => {
+const Switch = ({ children, location }) => {
   const router = useRouter();
   const matcher = router.matcher;
   const [originalLocation] = useLocationFromRouter(router);
@@ -187,7 +181,7 @@ export const Switch = ({ children, location }) => {
     let match = 0;
 
     if (
-      isValidElement(element) &&
+      React.isValidElement(element) &&
       // we don't require an element to be of type Route,
       // but we do require it to contain a truthy `path` prop.
       // this allows to use different components that wrap Route
@@ -196,23 +190,32 @@ export const Switch = ({ children, location }) => {
         ? matcher(element.props.path, location || originalLocation)
         : [true, {}])[0]
     )
-      return cloneElement(element, { match });
+      return React.cloneElement(element, { match });
   }
 
   return null;
 };
 
-export const Redirect = (props) => {
+const Redirect = (props) => {
   const { to, href = to } = props;
   const [, navigate] = useLocation();
-  const redirect = useEvent(() => navigate(to || href, props));
+  const redirect = reactDeps.useEvent(() => navigate(to || href, props));
 
   // redirect is guaranteed to be stable since it is returned from useEvent
-  useIsomorphicLayoutEffect(() => {
+  reactDeps.useIsomorphicLayoutEffect(() => {
     redirect();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return null;
 };
 
-export default useRoute;
+exports.Link = Link;
+exports.Redirect = Redirect;
+exports.Route = Route;
+exports.Router = Router;
+exports.Switch = Switch;
+exports.default = useRoute;
+exports.useLocation = useLocation;
+exports.useParams = useParams;
+exports.useRoute = useRoute;
+exports.useRouter = useRouter;

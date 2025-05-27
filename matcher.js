@@ -1,5 +1,9 @@
+'use strict';
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
 // creates a matcher function
-export default function makeMatcher(makeRegexpFn = pathToRegexp) {
+function makeMatcher(makeRegexpFn = pathToRegexp) {
   let cache = {};
 
   // obtains a cached regexp version of the pattern
@@ -64,3 +68,5 @@ const pathToRegexp = (pattern) => {
   result += escapeRx(pattern.substring(lastIndex));
   return { keys, regexp: new RegExp("^" + result + "(?:\\/)?$", "i") };
 };
+
+exports.default = makeMatcher;

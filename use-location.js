@@ -1,5 +1,11 @@
-import { useSyncExternalStore, useEvent } from "./react-deps.js";
-import { absolutePath, relativePath } from "./paths.js";
+'use strict';
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+var reactDeps = require('./react-deps.js');
+var paths = require('./paths-ab875b3b.js');
+var useSyncExternalStore = require('./use-sync-external-store');
+require('react');
 
 /**
  * History API docs @see https://developer.mozilla.org/en-US/docs/Web/API/History
@@ -8,7 +14,7 @@ const eventPopstate = "popstate";
 const eventPushState = "pushState";
 const eventReplaceState = "replaceState";
 const eventHashchange = "hashchange";
-export const events = [
+const events = [
   eventPopstate,
   eventPushState,
   eventReplaceState,
@@ -26,21 +32,21 @@ const subscribeToLocationUpdates = (callback) => {
   };
 };
 
-export const useLocationProperty = (fn, ssrFn) =>
-  useSyncExternalStore(subscribeToLocationUpdates, fn, ssrFn);
+const useLocationProperty = (fn, ssrFn) =>
+  useSyncExternalStore.useSyncExternalStore(subscribeToLocationUpdates, fn, ssrFn);
 
 const currentSearch = () => location.search;
-export const useSearch = () => useLocationProperty(currentSearch);
+const useSearch = () => useLocationProperty(currentSearch);
 
 const currentPathname = () => location.pathname;
 
-export const usePathname = ({ ssrPath } = {}) =>
+const usePathname = ({ ssrPath } = {}) =>
   useLocationProperty(
     currentPathname,
     ssrPath ? () => ssrPath : currentPathname
   );
 
-export const navigate = (to, { replace = false } = {}) =>
+const navigate = (to, { replace = false } = {}) =>
   history[replace ? eventReplaceState : eventPushState](null, "", to);
 
 // the 2nd argument of the `useLocation` return value is a function
@@ -50,11 +56,9 @@ export const navigate = (to, { replace = false } = {}) =>
 // it can be passed down as an element prop without any performance concerns.
 // (This is achieved via `useEvent`.)
 const useLocation = (opts = {}) => [
-  relativePath(opts.base, usePathname(opts)),
-  useEvent((to, navOpts) => navigate(absolutePath(to, opts.base), navOpts)),
+  paths.relativePath(opts.base, usePathname(opts)),
+  reactDeps.useEvent((to, navOpts) => navigate(paths.absolutePath(to, opts.base), navOpts)),
 ];
-
-export default useLocation;
 
 // While History API does have `popstate` event, the only
 // proper way to listen to changes via `push/replaceState`
@@ -77,3 +81,10 @@ if (typeof history !== "undefined") {
     };
   }
 }
+
+exports.default = useLocation;
+exports.events = events;
+exports.navigate = navigate;
+exports.useLocationProperty = useLocationProperty;
+exports.usePathname = usePathname;
+exports.useSearch = useSearch;

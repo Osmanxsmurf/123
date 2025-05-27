@@ -1,4 +1,26 @@
-import * as React from "react";
+'use strict';
+
+var React = require('react');
+var useSyncExternalStore = require('./use-sync-external-store');
+
+function _interopNamespaceDefault(e) {
+  var n = Object.create(null);
+  if (e) {
+    Object.keys(e).forEach(function (k) {
+      if (k !== 'default') {
+        var d = Object.getOwnPropertyDescriptor(e, k);
+        Object.defineProperty(n, k, d.get ? d : {
+          enumerable: true,
+          get: function () { return e[k]; }
+        });
+      }
+    });
+  }
+  n.default = e;
+  return Object.freeze(n);
+}
+
+var React__namespace = /*#__PURE__*/_interopNamespaceDefault(React);
 
 // React.useInsertionEffect is not available in React <18
 const {
@@ -6,25 +28,7 @@ const {
   useLayoutEffect,
   useRef,
   useInsertionEffect: useBuiltinInsertionEffect,
-} = React;
-
-export {
-  useState,
-  useContext,
-  createContext,
-  isValidElement,
-  cloneElement,
-  createElement,
-  Fragment,
-  forwardRef,
-} from "react";
-
-// To resolve webpack 5 errors, while not presenting problems for native,
-// we copy the approaches from https://github.com/TanStack/query/pull/3561
-// and https://github.com/TanStack/query/pull/3601
-// ~ Show this aging PR some love to remove the need for this hack:
-//   https://github.com/facebook/react/pull/25231 ~
-export { useSyncExternalStore } from "./use-sync-external-store.js";
+} = React__namespace;
 
 // Copied from:
 // https://github.com/facebook/react/blob/main/packages/shared/ExecutionEnvironment.js
@@ -39,13 +43,13 @@ const canUseDOM = !!(
 // "React currently throws a warning when using useLayoutEffect on the server.
 // To get around it, we can conditionally useEffect on the server (no-op) and
 // useLayoutEffect in the browser."
-export const useIsomorphicLayoutEffect = canUseDOM
+const useIsomorphicLayoutEffect = canUseDOM
   ? useLayoutEffect
   : useEffect;
 
 // useInsertionEffect is already a noop on the server.
 // See: https://github.com/facebook/react/blob/main/packages/react-server/src/ReactFizzHooks.js
-export const useInsertionEffect =
+const useInsertionEffect =
   useBuiltinInsertionEffect || useIsomorphicLayoutEffect;
 
 // Userland polyfill while we wait for the forthcoming
@@ -54,7 +58,7 @@ export const useInsertionEffect =
 // there is no lifecycle or Hook in React that we can use to switch
 // .current at the right timing."
 // So we will have to make do with this "close enough" approach for now.
-export const useEvent = (fn) => {
+const useEvent = (fn) => {
   const ref = useRef([fn, (...args) => ref[0](...args)]).current;
   // Per Dan Abramov: useInsertionEffect executes marginally closer to the
   // correct timing for ref synchronization than useLayoutEffect on React 18.
@@ -64,3 +68,43 @@ export const useEvent = (fn) => {
   });
   return ref[1];
 };
+
+Object.defineProperty(exports, 'Fragment', {
+  enumerable: true,
+  get: function () { return React.Fragment; }
+});
+Object.defineProperty(exports, 'cloneElement', {
+  enumerable: true,
+  get: function () { return React.cloneElement; }
+});
+Object.defineProperty(exports, 'createContext', {
+  enumerable: true,
+  get: function () { return React.createContext; }
+});
+Object.defineProperty(exports, 'createElement', {
+  enumerable: true,
+  get: function () { return React.createElement; }
+});
+Object.defineProperty(exports, 'forwardRef', {
+  enumerable: true,
+  get: function () { return React.forwardRef; }
+});
+Object.defineProperty(exports, 'isValidElement', {
+  enumerable: true,
+  get: function () { return React.isValidElement; }
+});
+Object.defineProperty(exports, 'useContext', {
+  enumerable: true,
+  get: function () { return React.useContext; }
+});
+Object.defineProperty(exports, 'useState', {
+  enumerable: true,
+  get: function () { return React.useState; }
+});
+Object.defineProperty(exports, 'useSyncExternalStore', {
+  enumerable: true,
+  get: function () { return useSyncExternalStore.useSyncExternalStore; }
+});
+exports.useEvent = useEvent;
+exports.useInsertionEffect = useInsertionEffect;
+exports.useIsomorphicLayoutEffect = useIsomorphicLayoutEffect;
