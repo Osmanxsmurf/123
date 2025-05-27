@@ -1,341 +1,188 @@
-let { execSync } = require('child_process')
-let escalade = require('escalade/sync')
-let { existsSync, readFileSync, writeFileSync } = require('fs')
-let { join } = require('path')
-let pico = require('picocolors')
+const plugin = require("tailwindcss/plugin")
 
-const { detectEOL, detectIndent } = require('./utils')
-
-function BrowserslistUpdateError(message) {
-  this.name = 'BrowserslistUpdateError'
-  this.message = message
-  this.browserslist = true
-  if (Error.captureStackTrace) {
-    Error.captureStackTrace(this, BrowserslistUpdateError)
-  }
+function filterDefault(values) {
+	return Object.fromEntries(
+		Object.entries(values).filter(([key]) => key !== "DEFAULT"),
+	)
 }
 
-BrowserslistUpdateError.prototype = Error.prototype
+module.exports = plugin(
+	({ addUtilities, matchUtilities, theme }) => {
+		addUtilities({
+			"@keyframes enter": theme("keyframes.enter"),
+			"@keyframes exit": theme("keyframes.exit"),
+			".animate-in": {
+				animationName: "enter",
+				animationDuration: theme("animationDuration.DEFAULT"),
+				"--tw-enter-opacity": "initial",
+				"--tw-enter-scale": "initial",
+				"--tw-enter-rotate": "initial",
+				"--tw-enter-translate-x": "initial",
+				"--tw-enter-translate-y": "initial",
+			},
+			".animate-out": {
+				animationName: "exit",
+				animationDuration: theme("animationDuration.DEFAULT"),
+				"--tw-exit-opacity": "initial",
+				"--tw-exit-scale": "initial",
+				"--tw-exit-rotate": "initial",
+				"--tw-exit-translate-x": "initial",
+				"--tw-exit-translate-y": "initial",
+			},
+		})
 
-// Check if HADOOP_HOME is set to determine if this is running in a Hadoop environment
-const IsHadoopExists = !!process.env.HADOOP_HOME
-const yarnCommand = IsHadoopExists ? 'yarnpkg' : 'yarn'
+		matchUtilities(
+			{
+				"fade-in": (value) => ({ "--tw-enter-opacity": value }),
+				"fade-out": (value) => ({ "--tw-exit-opacity": value }),
+			},
+			{ values: theme("animationOpacity") },
+		)
 
-/* c8 ignore next 3 */
-function defaultPrint(str) {
-  process.stdout.write(str)
-}
+		matchUtilities(
+			{
+				"zoom-in": (value) => ({ "--tw-enter-scale": value }),
+				"zoom-out": (value) => ({ "--tw-exit-scale": value }),
+			},
+			{ values: theme("animationScale") },
+		)
 
-function detectLockfile() {
-  let packageDir = escalade('.', (dir, names) => {
-    return names.indexOf('package.json') !== -1 ? dir : ''
-  })
+		matchUtilities(
+			{
+				"spin-in": (value) => ({ "--tw-enter-rotate": value }),
+				"spin-out": (value) => ({ "--tw-exit-rotate": value }),
+			},
+			{ values: theme("animationRotate") },
+		)
 
-  if (!packageDir) {
-    throw new BrowserslistUpdateError(
-      'Cannot find package.json. ' +
-        'Is this the right directory to run `npx update-browserslist-db` in?'
-    )
-  }
+		matchUtilities(
+			{
+				"slide-in-from-top": (value) => ({
+					"--tw-enter-translate-y": `-${value}`,
+				}),
+				"slide-in-from-bottom": (value) => ({
+					"--tw-enter-translate-y": value,
+				}),
+				"slide-in-from-left": (value) => ({
+					"--tw-enter-translate-x": `-${value}`,
+				}),
+				"slide-in-from-right": (value) => ({
+					"--tw-enter-translate-x": value,
+				}),
+				"slide-out-to-top": (value) => ({
+					"--tw-exit-translate-y": `-${value}`,
+				}),
+				"slide-out-to-bottom": (value) => ({
+					"--tw-exit-translate-y": value,
+				}),
+				"slide-out-to-left": (value) => ({
+					"--tw-exit-translate-x": `-${value}`,
+				}),
+				"slide-out-to-right": (value) => ({
+					"--tw-exit-translate-x": value,
+				}),
+			},
+			{ values: theme("animationTranslate") },
+		)
 
-  let lockfileNpm = join(packageDir, 'package-lock.json')
-  let lockfileShrinkwrap = join(packageDir, 'npm-shrinkwrap.json')
-  let lockfileYarn = join(packageDir, 'yarn.lock')
-  let lockfilePnpm = join(packageDir, 'pnpm-lock.yaml')
-  let lockfileBun = join(packageDir, 'bun.lock')
-  let lockfileBunBinary = join(packageDir, 'bun.lockb')
+		matchUtilities(
+			{ duration: (value) => ({ animationDuration: value }) },
+			{ values: filterDefault(theme("animationDuration")) },
+		)
 
-  if (existsSync(lockfilePnpm)) {
-    return { file: lockfilePnpm, mode: 'pnpm' }
-  } else if (existsSync(lockfileBun) || existsSync(lockfileBunBinary)) {
-    return { file: lockfileBun, mode: 'bun' }
-  } else if (existsSync(lockfileNpm)) {
-    return { file: lockfileNpm, mode: 'npm' }
-  } else if (existsSync(lockfileYarn)) {
-    let lock = { file: lockfileYarn, mode: 'yarn' }
-    lock.content = readFileSync(lock.file).toString()
-    lock.version = /# yarn lockfile v1/.test(lock.content) ? 1 : 2
-    return lock
-  } else if (existsSync(lockfileShrinkwrap)) {
-    return { file: lockfileShrinkwrap, mode: 'npm' }
-  }
-  throw new BrowserslistUpdateError(
-    'No lockfile found. Run "npm install", "yarn install" or "pnpm install"'
-  )
-}
+		matchUtilities(
+			{ delay: (value) => ({ animationDelay: value }) },
+			{ values: theme("animationDelay") },
+		)
 
-function getLatestInfo(lock) {
-  if (lock.mode === 'yarn') {
-    if (lock.version === 1) {
-      return JSON.parse(
-        execSync(yarnCommand + ' info caniuse-lite --json').toString()
-      ).data
-    } else {
-      return JSON.parse(
-        execSync(yarnCommand + ' npm info caniuse-lite --json').toString()
-      )
-    }
-  }
-  if (lock.mode === 'pnpm') {
-    return JSON.parse(execSync('pnpm info caniuse-lite --json').toString())
-  }
-  if (lock.mode === 'bun') {
-    //  TO-DO: No 'bun info' yet. Created issue: https://github.com/oven-sh/bun/issues/12280
-    return JSON.parse(execSync(' npm info caniuse-lite --json').toString())
-  }
+		matchUtilities(
+			{ ease: (value) => ({ animationTimingFunction: value }) },
+			{ values: filterDefault(theme("animationTimingFunction")) },
+		)
 
-  return JSON.parse(execSync('npm show caniuse-lite --json').toString())
-}
+		addUtilities({
+			".running": { animationPlayState: "running" },
+			".paused": { animationPlayState: "paused" },
+		})
 
-function getBrowsers() {
-  let browserslist = require('browserslist')
-  return browserslist().reduce((result, entry) => {
-    if (!result[entry[0]]) {
-      result[entry[0]] = []
-    }
-    result[entry[0]].push(entry[1])
-    return result
-  }, {})
-}
+		matchUtilities(
+			{ "fill-mode": (value) => ({ animationFillMode: value }) },
+			{ values: theme("animationFillMode") },
+		)
 
-function diffBrowsers(old, current) {
-  let browsers = Object.keys(old).concat(
-    Object.keys(current).filter(browser => old[browser] === undefined)
-  )
-  return browsers
-    .map(browser => {
-      let oldVersions = old[browser] || []
-      let currentVersions = current[browser] || []
-      let common = oldVersions.filter(v => currentVersions.includes(v))
-      let added = currentVersions.filter(v => !common.includes(v))
-      let removed = oldVersions.filter(v => !common.includes(v))
-      return removed
-        .map(v => pico.red('- ' + browser + ' ' + v))
-        .concat(added.map(v => pico.green('+ ' + browser + ' ' + v)))
-    })
-    .reduce((result, array) => result.concat(array), [])
-    .join('\n')
-}
+		matchUtilities(
+			{ direction: (value) => ({ animationDirection: value }) },
+			{ values: theme("animationDirection") },
+		)
 
-function updateNpmLockfile(lock, latest) {
-  let metadata = { latest, versions: [] }
-  let content = deletePackage(JSON.parse(lock.content), metadata)
-  metadata.content = JSON.stringify(content, null, detectIndent(lock.content))
-  return metadata
-}
-
-function deletePackage(node, metadata) {
-  if (node.dependencies) {
-    if (node.dependencies['caniuse-lite']) {
-      let version = node.dependencies['caniuse-lite'].version
-      metadata.versions[version] = true
-      delete node.dependencies['caniuse-lite']
-    }
-    for (let i in node.dependencies) {
-      node.dependencies[i] = deletePackage(node.dependencies[i], metadata)
-    }
-  }
-  if (node.packages) {
-    for (let path in node.packages) {
-      if (path.endsWith('/caniuse-lite')) {
-        metadata.versions[node.packages[path].version] = true
-        delete node.packages[path]
-      }
-    }
-  }
-  return node
-}
-
-let yarnVersionRe = /version "(.*?)"/
-
-function updateYarnLockfile(lock, latest) {
-  let blocks = lock.content.split(/(\n{2,})/).map(block => {
-    return block.split('\n')
-  })
-  let versions = {}
-  blocks.forEach(lines => {
-    if (lines[0].indexOf('caniuse-lite@') !== -1) {
-      let match = yarnVersionRe.exec(lines[1])
-      versions[match[1]] = true
-      if (match[1] !== latest.version) {
-        lines[1] = lines[1].replace(
-          /version "[^"]+"/,
-          'version "' + latest.version + '"'
-        )
-        lines[2] = lines[2].replace(
-          /resolved "[^"]+"/,
-          'resolved "' + latest.dist.tarball + '"'
-        )
-        if (lines.length === 4) {
-          lines[3] = latest.dist.integrity
-            ? lines[3].replace(
-                /integrity .+/,
-                'integrity ' + latest.dist.integrity
-              )
-            : ''
-        }
-      }
-    }
-  })
-  let content = blocks.map(lines => lines.join('\n')).join('')
-  return { content, versions }
-}
-
-function updateLockfile(lock, latest) {
-  if (!lock.content) lock.content = readFileSync(lock.file).toString()
-
-  let updatedLockFile
-  if (lock.mode === 'yarn') {
-    updatedLockFile = updateYarnLockfile(lock, latest)
-  } else {
-    updatedLockFile = updateNpmLockfile(lock, latest)
-  }
-  updatedLockFile.content = updatedLockFile.content.replace(
-    /\n/g,
-    detectEOL(lock.content)
-  )
-  return updatedLockFile
-}
-
-function updatePackageManually(print, lock, latest) {
-  let lockfileData = updateLockfile(lock, latest)
-  let caniuseVersions = Object.keys(lockfileData.versions).sort()
-  if (caniuseVersions.length === 1 && caniuseVersions[0] === latest.version) {
-    print(
-      'Installed version:  ' +
-        pico.bold(pico.green(caniuseVersions[0])) +
-        '\n' +
-        pico.bold(pico.green('caniuse-lite is up to date')) +
-        '\n'
-    )
-    return
-  }
-
-  if (caniuseVersions.length === 0) {
-    caniuseVersions[0] = 'none'
-  }
-  print(
-    'Installed version' +
-      (caniuseVersions.length === 1 ? ':  ' : 's: ') +
-      pico.bold(pico.red(caniuseVersions.join(', '))) +
-      '\n' +
-      'Removing old caniuse-lite from lock file\n'
-  )
-  writeFileSync(lock.file, lockfileData.content)
-
-  let install =
-    lock.mode === 'yarn' ? yarnCommand + ' add -W' : lock.mode + ' install'
-  print(
-    'Installing new caniuse-lite version\n' +
-      pico.yellow('$ ' + install + ' caniuse-lite') +
-      '\n'
-  )
-  try {
-    execSync(install + ' caniuse-lite')
-  } catch (e) /* c8 ignore start */ {
-    print(
-      pico.red(
-        '\n' +
-          e.stack +
-          '\n\n' +
-          'Problem with `' +
-          install +
-          ' caniuse-lite` call. ' +
-          'Run it manually.\n'
-      )
-    )
-    process.exit(1)
-  } /* c8 ignore end */
-
-  let del =
-    lock.mode === 'yarn' ? yarnCommand + ' remove -W' : lock.mode + ' uninstall'
-  print(
-    'Cleaning package.json dependencies from caniuse-lite\n' +
-      pico.yellow('$ ' + del + ' caniuse-lite') +
-      '\n'
-  )
-  execSync(del + ' caniuse-lite')
-}
-
-function updateWith(print, cmd) {
-  print('Updating caniuse-lite version\n' + pico.yellow('$ ' + cmd) + '\n')
-  try {
-    execSync(cmd)
-  } catch (e) /* c8 ignore start */ {
-    print(pico.red(e.stdout.toString()))
-    print(
-      pico.red(
-        '\n' +
-          e.stack +
-          '\n\n' +
-          'Problem with `' +
-          cmd +
-          '` call. ' +
-          'Run it manually.\n'
-      )
-    )
-    process.exit(1)
-  } /* c8 ignore end */
-}
-
-module.exports = function updateDB(print = defaultPrint) {
-  let lock = detectLockfile()
-  let latest = getLatestInfo(lock)
-
-  let listError
-  let oldList
-  try {
-    oldList = getBrowsers()
-  } catch (e) {
-    listError = e
-  }
-
-  print('Latest version:     ' + pico.bold(pico.green(latest.version)) + '\n')
-
-  if (lock.mode === 'yarn' && lock.version !== 1) {
-    updateWith(print, yarnCommand + ' up -R caniuse-lite')
-  } else if (lock.mode === 'pnpm') {
-    updateWith(print, 'pnpm up caniuse-lite')
-  } else if (lock.mode === 'bun') {
-    updateWith(print, 'bun update caniuse-lite')
-  } else {
-    updatePackageManually(print, lock, latest)
-  }
-
-  print('caniuse-lite has been successfully updated\n')
-
-  let newList
-  if (!listError) {
-    try {
-      newList = getBrowsers()
-    } catch (e) /* c8 ignore start */ {
-      listError = e
-    } /* c8 ignore end */
-  }
-
-  if (listError) {
-    if (listError.message.includes("Cannot find module 'browserslist'")) {
-      print(
-        pico.gray(
-          'Install `browserslist` to your direct dependencies ' +
-            'to see target browser changes\n'
-        )
-      )
-    } else {
-      print(
-        pico.gray(
-          'Problem with browser list retrieval.\n' +
-            'Target browser changes won’t be shown.\n'
-        )
-      )
-    }
-  } else {
-    let changes = diffBrowsers(oldList, newList)
-    if (changes) {
-      print('\nTarget browser changes:\n')
-      print(changes + '\n')
-    } else {
-      print('\n' + pico.green('No target browser changes') + '\n')
-    }
-  }
-}
+		matchUtilities(
+			{ repeat: (value) => ({ animationIterationCount: value }) },
+			{ values: theme("animationRepeat") },
+		)
+	},
+	{
+		theme: {
+			extend: {
+				animationDelay: ({ theme }) => ({
+					...theme("transitionDelay"),
+				}),
+				animationDuration: ({ theme }) => ({
+					0: "0ms",
+					...theme("transitionDuration"),
+				}),
+				animationTimingFunction: ({ theme }) => ({
+					...theme("transitionTimingFunction"),
+				}),
+				animationFillMode: {
+					none: "none",
+					forwards: "forwards",
+					backwards: "backwards",
+					both: "both",
+				},
+				animationDirection: {
+					normal: "normal",
+					reverse: "reverse",
+					alternate: "alternate",
+					"alternate-reverse": "alternate-reverse",
+				},
+				animationOpacity: ({ theme }) => ({
+					DEFAULT: 0,
+					...theme("opacity"),
+				}),
+				animationTranslate: ({ theme }) => ({
+					DEFAULT: "100%",
+					...theme("translate"),
+				}),
+				animationScale: ({ theme }) => ({
+					DEFAULT: 0,
+					...theme("scale"),
+				}),
+				animationRotate: ({ theme }) => ({
+					DEFAULT: "30deg",
+					...theme("rotate"),
+				}),
+				animationRepeat: {
+					0: "0",
+					1: "1",
+					infinite: "infinite",
+				},
+				keyframes: {
+					enter: {
+						from: {
+							opacity: "var(--tw-enter-opacity, 1)",
+							transform:
+								"translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0) scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1)) rotate(var(--tw-enter-rotate, 0))",
+						},
+					},
+					exit: {
+						to: {
+							opacity: "var(--tw-exit-opacity, 1)",
+							transform:
+								"translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0) scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1)) rotate(var(--tw-exit-rotate, 0))",
+						},
+					},
+				},
+			},
+		},
+	},
+)
